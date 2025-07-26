@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma';
 import { signupInput, signinInput, SignupInput, SigninInput } from '../utils/zodSchema';
 import { authMiddleware } from '../middleware/auth';
+import passport from '../utils/passportLogic';
 import dotenv from 'dotenv';
 
 dotenv.config(); 
@@ -18,11 +19,14 @@ if (!JWT_SECRET) {
   process.exit(1); 
 }
 
+export const generateToken = (userId: string) => {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
+};
+
 authRouter.post('/signup', async (req: Request<{}, {}, SignupInput>, res: Response) => {
   try {
     const { email, name, password } = signupInput.parse(req.body);
 
-    // Check if user with this email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: email },
     });
@@ -38,6 +42,7 @@ authRouter.post('/signup', async (req: Request<{}, {}, SignupInput>, res: Respon
         email: email,
         name: name,
         password: hashedPassword,
+        provider: 'local',
       },
       select: {
         id: true,
@@ -46,7 +51,7 @@ authRouter.post('/signup', async (req: Request<{}, {}, SignupInput>, res: Respon
       }
     });
 
-    const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '1h' }); // Token expires in 1 hour
+    const token = generateToken(newUser.id);
 
     res.status(201).json({
       message: 'User registered successfully!',
@@ -79,13 +84,20 @@ authRouter.post('/signin', async (req: Request<{}, {}, SigninInput>, res: Respon
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // Check if user signed up with Google OAuth
+    if (user.provider === 'google' && !user.password) {
+      return res.status(401).json({ 
+        message: 'This account was created with Google. Please use Google Sign-In.' 
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password!);
 
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1h' }); // Token expires in 1 hour
+    const token = generateToken(user.id);
 
     res.status(200).json({
       message: 'Signed in successfully!',
@@ -106,28 +118,17 @@ authRouter.post('/signin', async (req: Request<{}, {}, SigninInput>, res: Respon
   }
 });
 
-// --- SIGNOUT Route ---
-// For stateless JWTs, server-side "signout" typically means telling the client
-// to discard the token. The token will eventually expire. If a more robust
-// solution (e.g., immediate invalidation) is needed, a token blacklist
-// stored in a database/cache would be required, which adds complexity.
-// For now, this just acknowledges the request.
 authRouter.post('/signout', authMiddleware, (req: Request, res: Response) => {
-  // Client-side: delete token from localStorage/cookies.
-  // Server-side: Acknowledge the request. If a blacklist were implemented,
-  // the token would be added to it here.
   res.status(200).json({ message: 'Signed out successfully. Please discard your token.' });
 });
 
-// Example of a protected route
 authRouter.get('/profile', authMiddleware, async (req: Request, res: Response) => {
-    // userId is available on req.userId thanks to authMiddleware
     const userId = (req as any).userId;
 
     try {
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, email: true, name: true }
+            select: { id: true, email: true, name: true, provider: true,calendarConnected:true }
         });
 
         if (!user) {
@@ -141,5 +142,30 @@ authRouter.get('/profile', authMiddleware, async (req: Request, res: Response) =
     }
 });
 
+authRouter.get('/google', 
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+authRouter.get('/google/SignIn/callback',
+  passport.authenticate('google', { session: false }),
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      console.log("GOOGLE SIGN IN")
+      if (!user) {
+        return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
+      }
+
+      const token = generateToken(user.id);
+
+      console.log(token)
+      res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+
+    } catch (error) {
+      console.error('Error in Google callback:', error);
+      res.redirect(`${process.env.CLIENT_URL}/login?error=server_error`);
+    }
+  }
+);
 
 export default authRouter;

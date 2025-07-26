@@ -24,7 +24,8 @@ export const createTaskInput = z.object({
   priority: z.enum(['high', 'medium', 'low'], {
     errorMap: () => ({ message: 'Priority must be high, medium, or low' })
   }).default('medium'),
-  completionDate: z.string() // Assuming date comes as a string (e.g., "YYYY-MM-DD")
+  dueDate: z.string(), // Assuming date comes as a string (e.g., "YYYY-MM-DD")
+  description:z.string().optional()
 });
 
 export type CreateTaskInput = z.infer<typeof createTaskInput>;
@@ -38,7 +39,8 @@ export const updateTaskInput = z.object({
   priority: z.enum(['high', 'medium', 'low'], {
     errorMap: () => ({ message: 'Priority must be high, medium, or low' })
   }).optional(),
-  completionDate: z.string().optional() // Allow null to clear the date
+  dueDate: z.string().optional(),
+  description:z.string().optional()
 });
 
 export type UpdateTaskInput = z.infer<typeof updateTaskInput>;
@@ -52,3 +54,19 @@ export const fetchTasksQuery = z.object({
 });
 
 export type FetchTasksQuery = z.infer<typeof fetchTasksQuery>;
+
+
+
+export const createNotificationInput = z.object({
+  message: z.string().min(1),
+  type: z.enum(['default', 'reminder', 'deadline', 'info', 'warning']).optional().default('default'),
+  dueDate: z.string().datetime(), // ISO 8601 string
+  taskId: z.string().optional(),  // Optional FK to task
+});
+
+export const updateNotificationInput = z.object({
+  isRead: z.boolean().optional(),
+  message: z.string().optional(),
+  dueDate: z.string().datetime().optional(),
+  type: z.enum(['default','critical']).optional(),
+});

@@ -10,52 +10,58 @@ import {
   fetchTasksQuery,
   FetchTasksQuery
 } from '../utils/zodSchema';
-import { getPriorityOrder } from '../utils/priorityMapping'; // Import the new utility
+import { getPriorityOrder } from '../utils/priorityMapping'; 
+import { publishReminder } from '../pubsub/publisher';
 
 const tasksRouter = Router();
 
-// --- CREATE Task Route ---
-// POST /api/v1/tasks
 tasksRouter.post('/', authMiddleware, async (req: Request<{}, {}, CreateTaskInput>, res: Response) => {
   const userId = req.userId;
-  console.log("IDHR PAHUCHA backend route mein")
-  
+ 
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized: User ID not found in token or invalid.' });
   }
 
   try {
-    // Validate request body using Zod
-    const { title, status, priority, completionDate } = createTaskInput.parse(req.body);
-
-    // Calculate priorityOrder based on the provided priority
+    const { title, status, priority, dueDate, description } = createTaskInput.parse(req.body);
     const priorityOrder = getPriorityOrder(priority);
-
-    let parsedCompletionDate: Date;
-    try {
-        parsedCompletionDate = new Date(completionDate);
-    } catch (dateError) {
-        return res.status(400).json({ message: 'Invalid completionDate format provided.' });
+    
+    let parsedDueDate: Date | null = null;
+    if (dueDate) {
+      try {
+        parsedDueDate = new Date(dueDate);
+        if (isNaN(parsedDueDate.getTime())) {
+          return res.status(400).json({ message: 'Invalid dueDate format provided.' });
+        }
+        
+        if (parsedDueDate <= new Date()) {
+          return res.status(400).json({ message: 'Due date must be in the future.' });
+        }
+      } catch (dateError) {
+        return res.status(400).json({ message: 'Invalid dueDate format provided.' });
+      }
     }
 
     const newTask = await prisma.task.create({
       data: {
         title,
+        description,
         status,
         priority,
-        priorityOrder, // Include the calculated priorityOrder
-        completionDate: parsedCompletionDate, // Use the parsed Date object
-        userId: userId, // Link task to the authenticated user
+        priorityOrder,
+        dueDate: parsedDueDate,
+        userId: userId,
       },
-      select: { // Select only necessary fields to return
+      select: {
         id: true,
         title: true,
+        description: true,
         status: true,
         priority: true,
-        priorityOrder: true, // Include in response
+        priorityOrder: true,
         userId: true,
-        completionDate: true,
-        createdAt: true, // Also include createdAt for consistency
+        dueDate: true,
+        createdAt: true,
       }
     });
 
@@ -76,9 +82,6 @@ tasksRouter.post('/', authMiddleware, async (req: Request<{}, {}, CreateTaskInpu
   }
 });
 
-// --- FETCH (READ) Tasks Route ---
-// GET /api/v1/tasks
-// Optional query parameters: ?status=PENDING&priority=High&search=keyword
 tasksRouter.get('/', authMiddleware, async (req: Request<{}, {}, {}, FetchTasksQuery>, res: Response) => {
   const userId = req.userId;
 
@@ -90,7 +93,7 @@ tasksRouter.get('/', authMiddleware, async (req: Request<{}, {}, {}, FetchTasksQ
     const { status, priority, search } = fetchTasksQuery.parse(req.query);
 
     const whereClause: any = {
-      userId: userId, // Always filter by the authenticated user's ID
+      userId: userId, 
     };
 
     if (status) {
@@ -102,7 +105,7 @@ tasksRouter.get('/', authMiddleware, async (req: Request<{}, {}, {}, FetchTasksQ
     if (search) {
       whereClause.title = {
         contains: search,
-        mode: 'insensitive', // Case-insensitive search
+        mode: 'insensitive',
       };
     }
 
@@ -110,18 +113,22 @@ tasksRouter.get('/', authMiddleware, async (req: Request<{}, {}, {}, FetchTasksQ
       where: whereClause,
       orderBy: [
         {
-          priorityOrder: 'asc', // Primary sort: High (1) -> Medium (2) -> Low (3)
+          priorityOrder: 'asc',
         },
         {
-          createdAt: 'desc', // Secondary sort: Newest first
-        },
+          createdAt: 'desc',
+        },{
+          status:'desc'
+        }
       ],
       select: {
         id: true,
         title: true,
+        description: true,
         status: true,
         priority: true,
-        priorityOrder: true, // Include in response
+        priorityOrder: true, 
+        dueDate: true,
         completionDate: true,
         createdAt: true,
       }
@@ -171,20 +178,30 @@ tasksRouter.put('/:taskId', authMiddleware, async (req: Request<{ taskId: string
         prismaUpdateData.priorityOrder = getPriorityOrder(updateData.priority);
     }
 
-    // Handle completionDate specifically if it's being updated
-    if (updateData.completionDate !== undefined) {
-      if (updateData.completionDate === null) {
-        prismaUpdateData.completionDate = null; // Set to null to clear the date in DB
+    // Handle dueDate specifically if it's being updated
+    if (updateData.dueDate !== undefined) {
+      if (updateData.dueDate === null) {
+        prismaUpdateData.dueDate = null; // Set to null to clear the date in DB
       } else {
         try {
-          const parsedDate = new Date(updateData.completionDate);
+          const parsedDate = new Date(updateData.dueDate);
           if (isNaN(parsedDate.getTime())) {
-            return res.status(400).json({ message: 'Invalid completionDate format.' });
+            return res.status(400).json({ message: 'Invalid dueDate format.' });
           }
-          prismaUpdateData.completionDate = parsedDate;
+          prismaUpdateData.dueDate = parsedDate;
         } catch (dateError) {
-            return res.status(400).json({ message: 'Invalid completionDate format.', details: dateError });
+            return res.status(400).json({ message: 'Invalid dueDate format.', details: dateError });
         }
+      }
+    }
+
+    // Handle completionDate when task is marked as completed
+    if (updateData.status) {
+      if (updateData.status === 'completed') {
+        prismaUpdateData.completionDate = new Date(); // Set to current timestamp
+      } else {
+        // If status is changed to something other than completed, clear completionDate
+        prismaUpdateData.completionDate = null;
       }
     }
 
@@ -208,9 +225,11 @@ tasksRouter.put('/:taskId', authMiddleware, async (req: Request<{ taskId: string
       select: {
         id: true,
         title: true,
+        description: true,
         status: true,
         priority: true,
         priorityOrder: true, // Include in response
+        dueDate: true,
         completionDate: true,
         createdAt: true,
         userId: true,
@@ -234,8 +253,7 @@ tasksRouter.put('/:taskId', authMiddleware, async (req: Request<{ taskId: string
   }
 });
 
-// --- DELETE Task Route ---
-// DELETE /api/v1/tasks/:taskId
+
 tasksRouter.delete('/:taskId', authMiddleware, async (req: Request<{ taskId: string }>, res: Response) => {
   const userId = req.userId;
   const { taskId } = req.params;

@@ -3,10 +3,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
-dotenv.config(); // Load environment variables
+dotenv.config(); 
 
 interface AuthenticatedRequest extends Request {
-  userId?: string; // Optional userId property
+  userId?: string; 
 }
 
 export const authMiddleware = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

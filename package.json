@@ -22,16 +22,25 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@google-cloud/pubsub": "^5.1.0",
     "@prisma/client": "^6.11.1",
     "@types/cors": "^2.8.19",
+    "@types/passport": "^1.0.17",
+    "@types/passport-google-oauth20": "^2.0.16",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
     "dotenv": "^17.1.0",
     "express": "^5.1.0",
+    "googleapis": "^153.0.0",
     "groq-sdk": "^0.26.0",
     "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.2.1",
     "openai": "^5.8.3",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
     "prisma": "^6.11.1",
+    "socket.io": "^4.8.1",
     "uuid": "^11.1.0",
     "zod": "^3.25.76"
   }
