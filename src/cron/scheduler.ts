@@ -27,7 +27,6 @@ export function startReminderCron() {
       });
 
       for (const task of dueTasks) {
-        // Check if notification already exists for this task and user
         const existingNotification = await prisma.notification.findFirst({
           where: {
             taskId: task.id,
@@ -40,7 +39,6 @@ export function startReminderCron() {
           continue;
         }
 
-        // Create notification entry
         const newNotification = await prisma.notification.create({
           data: {
             message: `Reminder: ${task.title}`,

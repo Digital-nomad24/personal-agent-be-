@@ -17,16 +17,7 @@ if (!TELEGRAM_BOT_TOKEN) {
 
 // --- NEW: Web App Connect API --- //
 telegramRouter.post('/connect', async (req, res) => {
-  /**
-   * Expected req.body:
-   * {
-   *   telegramId: string,
-   *   telegramChatId: string,
-   *   email: string,
-   *   password?: string,     // if local user
-   *   provider?: string      // 'google' or 'local', for clarity
-   * }
-   */
+
   const { telegramId, telegramChatId, email, password, provider } = req.body;
    console.log("REACHED THE TELEGRAM ROUTE")
   if (!telegramId || !telegramChatId || !email) {
@@ -35,12 +26,11 @@ telegramRouter.post('/connect', async (req, res) => {
 
   try {
     const user = await prisma.user.findUnique({ where: { email } });
-
+    console.log(user)
     if (!user) {
       return res.status(404).json({ error: 'Account not found.' });
     }
 
-    // Check if user already linked to a different Telegram (for security)
     if (
       user.telegramChatId && 
       user.telegramChatId !== String(telegramChatId)
@@ -60,13 +50,11 @@ telegramRouter.post('/connect', async (req, res) => {
         return res.status(401).json({ error: "Invalid password." });
       }
     } else if (user.provider === "google") {
-      // For Google, do NOT allow password input
       if (password) {
         return res.status(400).json({ error: "This Google account doesn't require a password." });
       }
     }
 
-    // Update telegramChatId (and optionally telegramId if you store it)
     await prisma.user.update({
       where: { id: user.id },
       data: { telegramChatId: String(telegramChatId) }
@@ -80,20 +68,48 @@ telegramRouter.post('/connect', async (req, res) => {
 });
 
 // --- CLEANED TELEGRAM BOT WEBHOOK --- //
+// Replace your webhook function with this enhanced version for debugging:
+
 telegramRouter.post('/webhook', async (req, res) => {
+  console.log("=".repeat(50));
+  console.log("👉 Telegram Webhook Triggered at:", new Date().toISOString());
+  console.log("📨 Full Request Body:", JSON.stringify(req.body, null, 2));
+  
   const message = req.body.message;
-  console.log("👉 Telegram Webhook Triggered");
-  console.log("📨 Message Text:", message?.text);
+  
+  // Enhanced logging
+  console.log("📋 Message Details:");
+  console.log("  - Message exists:", !!message);
+  console.log("  - Chat exists:", !!message?.chat);
+  console.log("  - Text:", message?.text);
+  console.log("  - Chat ID:", message?.chat?.id);
+  console.log("  - Message ID:", message?.message_id);
+  console.log("  - From User:", message?.from?.username || message?.from?.first_name);
+  
   if (!message || !message.chat || !message.text) {
+    console.log("❌ Incomplete message - ignoring");
     return res.status(200).send("Ignored: Incomplete message");
   }
 
   const chatId = message.chat.id;
   const fullText = message.text.trim();
   const command = fullText.split(" ")[0].toLowerCase();
+  
+  console.log("🔍 Parsed Command Details:");
+  console.log("  - Full Text:", fullText);
+  console.log("  - Command:", command);
+  console.log("  - Chat ID:", chatId);
+  
+  // Add a simple test response to every message first
+  try {
+    await sendTelegramMessage(chatId, `🤖 I received: "${fullText}"`);
+    console.log("✅ Test response sent successfully");
+  } catch (testError) {
+    console.error("❌ Failed to send test response:", testError);
+  }
 
-
-  if (command === '/remind') {
+    if (command === '/remind') {
+    console.log('🔔 Processing REMIND command');
     try {
       // Check if user is authenticated
       const user = await prisma.user.findFirst({
@@ -132,7 +148,6 @@ telegramRouter.post('/webhook', async (req, res) => {
         return res.status(200).send("No reminder message");
       }
       
-      // Prepare the payload for your API
       const reminderPayload = {
         userId: user.id,
         message: reminderMessage,
@@ -206,53 +221,24 @@ telegramRouter.post('/webhook', async (req, res) => {
       
       return res.status(200).send("Error in reminder processing");
     }
-  } else if (command === '/help') {
-    try {
-      const user = await prisma.user.findFirst({
-        where: { telegramChatId: String(chatId) },
-        select: { name: true, email: true }
-      });
-      
-      let helpText = '📚 **Reminder Bot Help**\n\n';
-      
-      if (user) {
-        helpText += `👤 **Connected as:** ${user.name} (${user.email})\n\n`;
-        helpText += '**Available Commands:**\n' +
-                   '• `/remind [message]` - Set a reminder\n' +
-                   '• `/help` - Show this help message\n' +
-                   '• `/start [email] [password]` - Reconnect account\n\n' +
-                   '**Reminder Examples:**\n' +
-                   '• `/remind Call mom tomorrow`\n' +
-                   '• `/remind Buy groceries`\n' +
-                   '• `/remind Team meeting at 3pm`';
-      } else {
-        helpText += '**First, connect your account:**\n' +
-                   '• For Google users: `/start [your_email]`\n' +
-                   '• For password users: `/start [your_email] [your_password]`\n\n' +
-                   '**Examples:**\n' +
-                   '• `/start john@gmail.com`\n' +
-                   '• `/start john@example.com mypassword123`\n\n' +
-                   '✨ After connecting, you can use `/remind` to set reminders!';
-      }
-      
-      await sendTelegramMessage(chatId, helpText);
-      return res.status(200).send("Help command processed");
-      
-    } catch (error) {
-      console.error("Error in help command:", error);
-      await sendTelegramMessage(chatId, '❌ Error displaying help. Please try again.');
-      return res.status(200).send("Error in help command");
-    }
+    
+  } else if (command === '/start') {
+    console.log('🚀 Processing START command');
+    await sendTelegramMessage(chatId, 'Start command received - handler needed!');
+    return res.status(200).send("Start command processed");
+    
   } else {
+    console.log('❓ Unknown command:', command);
+    
     await sendTelegramMessage(chatId,
-    '❓ **Unknown Command**\n\n' +
-    'Available commands:\n' +
-    '• `/start` - Connect your account\n' +
-    '• `/remind` - Set a reminder\n' +
-    '• `/help` - Show help'
-  );
+      '❓ **Unknown Command**\n\n' +
+      'Available commands:\n' +
+      '• `/remind` - Set a reminder\n' +
+      '• `/help` - Show help'
+    );
+    return res.status(200).send("Unknown command processed");
   }
-
+  
 });
 
 export default telegramRouter;
