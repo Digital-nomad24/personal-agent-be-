@@ -108,71 +108,160 @@ function generateEmailHTML(data: CalendarAccessEmailData): string {
 
   return `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Meeting Request - Calendar Access</title>
       <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px; }
-        .meeting-details { background: white; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #667eea; }
-        .cta-button { display: inline-block; background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
-        .cta-button:hover { background: #218838; }
-        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; font-size: 14px; color: #6c757d; }
-        .warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 6px; margin: 20px 0; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          color: #333;
+          margin: 0;
+          padding: 0;
+          background-color: #f4f6f8;
+        }
+        .container {
+          max-width: 640px;
+          margin: 0 auto;
+          background: white;
+          border-radius: 10px;
+          overflow: hidden;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        }
+        .header {
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          color: white;
+          padding: 30px 20px;
+          text-align: center;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 24px;
+        }
+        .header p {
+          margin-top: 6px;
+          font-size: 16px;
+          opacity: 0.9;
+        }
+        .content {
+          padding: 25px 20px 30px;
+        }
+        .content p {
+          margin: 0 0 15px;
+          font-size: 15px;
+          line-height: 1.6;
+        }
+        .meeting-details {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 20px 0;
+        }
+        .meeting-details th,
+        .meeting-details td {
+          padding: 10px 12px;
+          text-align: left;
+          border-bottom: 1px solid #eee;
+          font-size: 14px;
+        }
+        .meeting-details th {
+          background-color: #f9f9fb;
+          font-weight: 600;
+        }
+        .cta-wrapper {
+          text-align: center;
+          margin: 25px 0;
+        }
+        .cta-button {
+          background-color: #28a745;
+          color: white !important;
+          padding: 14px 28px;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: bold;
+          font-size: 15px;
+          display: inline-block;
+          transition: background-color 0.2s ease;
+        }
+        .cta-button:hover {
+          background-color: #218838;
+        }
+        .warning {
+          background: #fff9e6;
+          border-left: 4px solid #ffcc00;
+          padding: 12px 15px;
+          font-size: 14px;
+          margin-top: 20px;
+          border-radius: 6px;
+        }
+        .footer {
+          font-size: 13px;
+          color: #6c757d;
+          margin-top: 25px;
+          border-top: 1px solid #eee;
+          padding-top: 15px;
+        }
       </style>
     </head>
     <body>
-      <div class="header">
-        <h1>📅 Meeting Request</h1>
-        <p>Someone wants to schedule a meeting with you</p>
-      </div>
-      
-      <div class="content">
-        <p>Hi ${targetName},</p>
-        
-        <p><strong>${requesterName}</strong> (${requesterEmail}) has requested to schedule a meeting with you.</p>
-        
-        <div class="meeting-details">
-          <h3>📋 Meeting Details</h3>
-          <p><strong>Title:</strong> ${meetingTitle}</p>
-          <p><strong>Purpose:</strong> ${meetingPurpose}</p>
-          <p><strong>Duration:</strong> ${duration} minutes</p>
-          <p><strong>Preferred Timeframe:</strong> ${preferredTimeframe}</p>
+      <div class="container">
+        <div class="header">
+          <h1>📅 Meeting Request</h1>
+          <p>Someone wants to schedule a meeting with you</p>
         </div>
-        
-        <p>To proceed with this meeting request, we need your permission to access your calendar availability. This will allow us to:</p>
-        
-        <ul>
-          <li>✅ Check your free/busy times</li>
-          <li>✅ Suggest available meeting slots</li>
-          <li>✅ Create the meeting once you confirm</li>
-        </ul>
-        
-        <div style="text-align: center;">
-          <a href="${approvalLink}" class="cta-button">
-            🔓 Grant Calendar Access & View Available Times
-          </a>
-        </div>
-        
-        <div class="warning">
-          <strong>⏰ This request expires on ${expiryDate}</strong><br>
-          Please respond before the expiration date to proceed with scheduling.
-        </div>
-        
-        <p>If you don't recognize this request or prefer not to schedule this meeting, you can simply ignore this email.</p>
-        
-        <div class="footer">
-          <p>This email was sent because ${requesterName} requested a meeting with your calendar (${data.targetEmail}).</p>
-          <p>No calendar access will be granted unless you click the approval button above.</p>
+        <div class="content">
+          <p>Hi ${targetName},</p>
+          <p><strong>${requesterName}</strong> (${requesterEmail}) has requested to schedule a meeting with you.</p>
+
+          <table class="meeting-details">
+            <tr>
+              <th>Title</th>
+              <td>${meetingTitle}</td>
+            </tr>
+            <tr>
+              <th>Purpose</th>
+              <td>${meetingPurpose}</td>
+            </tr>
+            <tr>
+              <th>Duration</th>
+              <td>${duration} minutes</td>
+            </tr>
+            <tr>
+              <th>Preferred Timeframe</th>
+              <td>${preferredTimeframe}</td>
+            </tr>
+          </table>
+
+          <p>To proceed with this request, we need your permission to access your calendar availability so we can:</p>
+          <ul>
+            <li>✅ Check your free/busy times</li>
+            <li>✅ Suggest available meeting slots</li>
+            <li>✅ Create the meeting once you confirm</li>
+          </ul>
+
+          <div class="cta-wrapper">
+            <a href="${approvalLink}" class="cta-button">
+              🔓 Grant Calendar Access & View Times
+            </a>
+          </div>
+
+          <div class="warning">
+            ⏰ This request expires on <strong>${expiryDate}</strong>. Please respond before then to proceed with scheduling.
+          </div>
+
+          <p>If you don't recognize this request, you can safely ignore this email.</p>
+
+          <div class="footer">
+            <p>This email was sent because ${requesterName} requested a meeting with your calendar (${data.targetEmail}).</p>
+            <p>No calendar access will be granted unless you click the approval button above.</p>
+          </div>
         </div>
       </div>
     </body>
     </html>
   `;
 }
+
 
 function generateEmailText(data: CalendarAccessEmailData): string {
   const {

@@ -84,7 +84,6 @@ authRouter.post('/signin', async (req: Request<{}, {}, SigninInput>, res: Respon
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
-    // Check if user signed up with Google OAuth
     if (user.provider === 'google' && !user.password) {
       return res.status(401).json({ 
         message: 'This account was created with Google. Please use Google Sign-In.' 

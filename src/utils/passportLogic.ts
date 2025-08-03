@@ -13,7 +13,6 @@ if (!GOOGLE_ID || !GOOGLE_SECRET) {
   process.exit(1);
 }
 
-// Configure the Google OAuth strategy
 const googleStrategy = new GoogleStrategy(
   {
     clientID: GOOGLE_ID,
@@ -22,9 +21,9 @@ const googleStrategy = new GoogleStrategy(
     scope: [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
-  'https://www.googleapis.com/auth/gmail.readonly',  // ✅ Required to read emails
-  'https://www.googleapis.com/auth/gmail.metadata',  // Optional, for metadata
-  'https://www.googleapis.com/auth/gmail.modify'     // Optional, if you want to modify/read attachments
+  'https://www.googleapis.com/auth/gmail.readonly',  
+  'https://www.googleapis.com/auth/gmail.metadata', 
+  'https://www.googleapis.com/auth/gmail.modify'     
 ],
   },
   async (accessToken: string, refreshToken: string, profile: Profile, done) => {
@@ -37,12 +36,10 @@ const googleStrategy = new GoogleStrategy(
         return done(new Error("Email not found in Google profile"), false);
       }
 
-      // Find by Google ID
       let user = await prisma.user.findUnique({ where: { googleId } });
 
       if (user) return done(null, user);
 
-      // Find by email (local auth previously)
       user = await prisma.user.findUnique({ where: { email } });
 
       if (user) {
@@ -52,13 +49,12 @@ const googleStrategy = new GoogleStrategy(
             googleId,
             provider: 'google',
             googleAccessToken: accessToken,
-            googleRefreshToken: refreshToken || user.googleRefreshToken, // only update if available
+            googleRefreshToken: refreshToken || user.googleRefreshToken, 
           },
         });
         return done(null, user);
       }
 
-      // Create new user
       user = await prisma.user.create({
         data: {
           googleId,
@@ -78,7 +74,6 @@ const googleStrategy = new GoogleStrategy(
   }
 );
 
-// Ensure refresh tokens are always returned
 googleStrategy.authorizationParams = () => ({
   access_type: 'offline',
   prompt: 'consent',

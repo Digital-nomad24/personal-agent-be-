@@ -7,9 +7,7 @@ import axios from 'axios';
 import { google } from 'googleapis';
 import jwt from 'jsonwebtoken';
 import {client} from "../index" // Adjust the path to where your function is
-import { sendTelegramMessage } from '../services/telegramService';
-import { generateToken } from './auth';
-import { processIndividualMeetingRequest } from '../utils/approve-callback.utils';
+import { handleApprovalCallback } from '../services/meetingbook/calendarApprovalService';
 
 
 
@@ -36,7 +34,6 @@ export async function getValidExternalAccessToken(targetEmail: string) {
     try {
       return await refreshExternalGoogleToken(targetEmail, tokenData.refreshToken, tokenData);
     } catch (error) {
-      // Remove invalid token from Redis
       await deleteRedisData(redisKey);
       throw new Error('Failed to refresh external token. User needs to re-approve access.');
     }
@@ -67,8 +64,7 @@ export async function refreshExternalGoogleToken(targetEmail: string, refreshTok
     const updatedTokenData = {
       ...existingTokenData,
       accessToken: credentials.access_token,
-      refreshToken: credentials.refresh_token || refreshToken, // Keep old refresh token if new one not provided
-      expiresAt: newExpiryDate.toISOString(),
+      refreshToken: credentials.refresh_token || refreshToken, 
       tokenType: credentials.token_type || 'Bearer',
       updatedAt: new Date().toISOString()
     };
@@ -221,7 +217,7 @@ gmailRouter.post('/request', authMiddleware, async (req: Request, res: Response)
 
       const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
 
-      // Create CalendarAccessRequest - FIXED: Use actual variables instead of hardcoded values
+      // Create CalendarAccessRequest - FIXED: Use correct Prisma relation syntax
       const accessRequestData: any = {
         requesterUser: {
           connect: { id: userId }, // Use actual userId from request
@@ -235,9 +231,11 @@ gmailRouter.post('/request', authMiddleware, async (req: Request, res: Response)
         preferredTimeframe: preferredTimeframe || "this week", // Use actual timeframe
       };
 
-      // Only add targetUserId if targetUser exists
+      // FIXED: Only add targetUser relation if targetUser exists, using connect operation
       if (targetUser?.id) {
-        accessRequestData.targetUserId = targetUser.id;
+        accessRequestData.targetUser = {
+          connect: { id: targetUser.id }
+        };
       }
 
       // Only add location if it exists and is a valid string
@@ -410,14 +408,12 @@ gmailRouter.get('/request-details/:token', async (req: Request, res: Response) =
       }
     };
 
-    // Ensure we're sending JSON with correct headers
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json(responseData);
 
   } catch (error: any) {
     console.error('❌ Error fetching request details:', error);
     
-    // Ensure JSON response even for errors
     res.setHeader('Content-Type', 'application/json');
     return res.status(500).json({ 
       success: false,
@@ -428,235 +424,9 @@ gmailRouter.get('/request-details/:token', async (req: Request, res: Response) =
 });
 
 gmailRouter.get('/approval-callback', async (req: Request, res: Response) => {
-  const code = req.query.code as string;
-  const state = req.query.state as string;
-  
-  console.log("📞 [STEP 1] REACHED THE APPROVAL CALLBACK");
-  console.log("📞 [DEBUG] Query params:", { code: !!code, state: !!state });
-  
-  if (!code || !state) {
-    console.log("❌ [STEP 1] Missing code or state");
-    return res.status(400).json({ message: 'Missing code or state' });
-  }
-
-  try {
-    console.log("🔐 [STEP 2] Starting JWT verification");
-    // Decode the state (which is your original JWT from the email)
-    let decoded;
-    try {
-      decoded = jwt.verify(state, JWT_SECRET) as {
-        userId: string;
-        type: string;
-        targetEmail: string;
-        purpose: string;
-        iat: number;
-        exp: number;
-      };
-      console.log("✅ [STEP 2] JWT decoded successfully:", {
-        userId: decoded.userId,
-        type: decoded.type,
-        targetEmail: decoded.targetEmail,
-        purpose: decoded.purpose
-      });
-    } catch (error) {
-      console.log("❌ [STEP 2] JWT verification failed:", error);
-      return res.status(400).json({ message: 'Invalid or expired state token' });
-    }
-
-    // Check if it's the right type
-    if (decoded.type !== 'calendar_access_request') {
-      console.log("❌ [STEP 2] Invalid state type:", decoded.type);
-      return res.status(400).json({ message: 'Invalid state type' });
-    }
-
-    console.log(`🔓 [STEP 3] Processing approval callback for: ${decoded.targetEmail}`);
-
-    // Exchange code for tokens
-    console.log("🔄 [STEP 4] Starting OAuth token exchange");
-    let tokenRes;
-    try {
-      tokenRes = await axios.post(
-        'https://oauth2.googleapis.com/token',
-        new URLSearchParams({
-          code,
-          client_id: process.env.GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-          redirect_uri: process.env.GOOGLE_APPROVAL_REDIRECT_URI!,
-          grant_type: 'authorization_code',
-        }),
-        {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          timeout: 10000
-        }
-      );
-      console.log("✅ [STEP 4] OAuth token exchange successful");
-    } catch (error: any) {
-      console.error('❌ [STEP 4] OAuth token exchange failed:', error.response?.data || error.message);
-      return res.status(500).json({ message: 'OAuth authentication failed' });
-    }
-
-    const { access_token, refresh_token, expires_in } = tokenRes.data;
-    console.log("🎫 [STEP 4] Tokens received:", { 
-      hasAccessToken: !!access_token, 
-      hasRefreshToken: !!refresh_token,
-      expiresIn: expires_in 
-    });
-
-    // Get and verify user info
-    console.log("👤 [STEP 5] Getting user info");
-    let userInfo;
-    try {
-      const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token });
-      
-      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-      userInfo = await oauth2.userinfo.get();
-      console.log("✅ [STEP 5] User info retrieved:", {
-        email: userInfo.data.email,
-        name: userInfo.data.name
-      });
-    } catch (error: any) {
-      console.error('❌ [STEP 5] Failed to get user info:', error.message);
-      return res.status(500).json({ message: 'Failed to verify user identity' });
-    }
-
-    if (userInfo.data.email !== decoded.targetEmail) {
-      console.log("❌ [STEP 5] Email mismatch:", {
-        expected: decoded.targetEmail,
-        received: userInfo.data.email
-      });
-      return res.status(403).json({ 
-        message: 'Email mismatch. Please sign in with the correct account.' 
-      });
-    }
-
-    console.log(`✅ [STEP 5] Email verified: ${userInfo.data.email}`);
-
-    // Find access request using the original token
-    console.log("🔍 [STEP 6] Finding access request in database");
-    const accessRequest = await prisma.calendarAccessRequest.findUnique({
-      where: { token: state },
-      include: {
-        requesterUser: {
-          select: { id: true, name: true, email: true, telegramChatId: true }
-        },
-        meetingRequests: {
-          select: { 
-            id: true, 
-            createdAt: true,
-            updatedAt: true,
-            slotOfferId: true,
-            requesterUserId: true,
-            accessRequestId: true,
-            meetingId: true
-          }
-        }
-      }
-    });
-
-    if (!accessRequest) {
-      console.log("❌ [STEP 6] Access request not found in database");
-      return res.status(404).json({ message: 'Access request not found' });
-    }
-
-    console.log("✅ [STEP 6] Access request found:", {
-      id: accessRequest.id,
-      status: accessRequest.status,
-      meetingRequestsCount: accessRequest.meetingRequests.length,
-      requesterUserId: accessRequest.requesterUser.id,
-      requesterEmail: accessRequest.requesterUser.email
-    });
-
-    if (accessRequest.status !== 'pending') {
-      console.log("❌ [STEP 6] Access request already processed:", accessRequest.status);
-      return res.status(404).json({ message: 'Request already processed' });
-    }
-
-    // Store tokens in Redis
-    console.log("💾 [STEP 7] Storing tokens in Redis");
-    const redisKey = `calendar_token:${decoded.targetEmail}`;
-    const tokenData = {
-      accessToken: access_token,
-      refreshToken: refresh_token,
-      expiresAt: new Date(Date.now() + expires_in * 1000).toISOString(),
-      userInfo: {
-        email: userInfo.data.email,
-        name: userInfo.data.name,
-        picture: userInfo.data.picture
-      },
-      accessRequestId: accessRequest.id
-    };
-
-    try {
-      await setRedisData(redisKey, tokenData, 24 * 60 * 60);
-      console.log(`✅ [STEP 7] Stored tokens in Redis for ${decoded.targetEmail}`);
-    } catch (error) {
-      console.error('❌ [STEP 7] Failed to store tokens in Redis:', error);
-      return res.status(500).json({ message: 'Failed to store calendar access tokens' });
-    }
-
-    // Update the access request status
-    console.log("📋 [STEP 8] Updating access request status to approved");
-    await prisma.calendarAccessRequest.update({
-      where: { id: accessRequest.id },
-      data: {
-        status: 'approved',
-        respondedAt: new Date(),
-      }
-    });
-
-    console.log(`✅ [STEP 8] Updated access request ${accessRequest.id} to approved`);
-
-    // Auto-process meeting requests after approval
-    console.log(`🚀 [STEP 9] Starting auto-processing for ${accessRequest.meetingRequests.length} meeting requests...`);
-    
-    // Process each meeting request asynchronously (don't block the response)
-    setImmediate(async () => {
-      console.log("🔄 [ASYNC STEP 1] setImmediate callback started");
-      console.log("🔄 [ASYNC DEBUG] Meeting requests to process:", accessRequest.meetingRequests.map(mr => ({
-        id: mr.id,
-        accessRequestId: mr.accessRequestId
-      })));
-      
-      try {
-        for (const meetingRequest of accessRequest.meetingRequests) {
-          console.log(`🔄 [ASYNC STEP 2] Processing meeting request: ${meetingRequest.id}`);
-          try {
-            await processIndividualMeetingRequest(
-              meetingRequest.id, 
-              decoded.targetEmail, 
-              accessRequest.requesterUser,
-              accessRequest // Pass the APPROVED accessRequest
-            );
-            console.log(`✅ [ASYNC STEP 2] Successfully processed meeting request: ${meetingRequest.id}`);
-          } catch (error) {
-            console.error(`❌ [ASYNC STEP 2] Error processing meeting request ${meetingRequest.id}:`, error);
-          }
-        }
-        console.log("✅ [ASYNC STEP 3] All meeting requests processed");
-      } catch (error) {
-        console.error("❌ [ASYNC ERROR] Fatal error in setImmediate callback:", error);
-      }
-    });
-
-    // Redirect to success page
-    console.log("🎉 [STEP 10] Redirecting to success page");
-    const successUrl = `${process.env.CLIENT_URL}/calendar/approval-success?` +
-      `email=${encodeURIComponent(decoded.targetEmail)}&` +
-      `requester=${encodeURIComponent(accessRequest.requesterUser.name || accessRequest.requesterUser.email)}`;
-    
-    return res.redirect(successUrl);
-
-  } catch (error: any) {
-    console.error('❌ [FATAL ERROR] Approval callback error:', error);
-    return res.status(500).json({ 
-      message: 'OAuth authentication failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
+  await handleApprovalCallback(req, res);
 });
 
-// ENHANCED: Function to process individual meeting requests with detailed debugging
 
 
 gmailRouter.post('/external-availability', async (req: Request, res: Response) => {
@@ -703,7 +473,6 @@ gmailRouter.post('/external-availability', async (req: Request, res: Response) =
 
     console.log(`📅 Fetching availability for ${targetEmail} from ${startDate} to ${endDate}`);
 
-    // Get OAuth2 client with valid token (handles refresh automatically)
     const oauth2Client = await getExternalOAuth2Client(targetEmail);
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 

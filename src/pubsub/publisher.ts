@@ -31,7 +31,6 @@ export type TaskWithUser = {
   };
 };
 
-// ✅ publishReminder
 export async function publishReminder(payload: ReminderPayload): Promise<string> {
   const dataBuffer = Buffer.from(JSON.stringify(payload));
 
@@ -45,7 +44,6 @@ export async function publishReminder(payload: ReminderPayload): Promise<string>
   }
 }
 
-// ✅ createReminderPayloadFromNotification
 export function createReminderPayloadFromNotification(
   notification: Notification,
   task: TaskWithUser

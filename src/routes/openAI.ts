@@ -48,9 +48,9 @@ openaiRouter.post('/extract-meeting', async (req: Request, res: Response) => {
      
       // Updated schema to match database expectations
       const meetingSchema = z.object({
-        title: z.string().min(1).max(200), // Match title length validation
-        duration: z.number().min(15).max(480), // Match duration validation
-        targetEmail: z.string().email().max(254), // Match email validation
+        title: z.string().min(1).max(200), 
+        duration: z.number().min(15).max(480), 
+        targetEmail: z.string().email().max(254), 
         purpose: z.string().optional(),
         preferredTimeframe: z.string().optional(),
         location: z.string().optional(),
@@ -92,6 +92,7 @@ openaiRouter.post('/extract-meeting', async (req: Request, res: Response) => {
 });
 openaiRouter.post('/extract-task', async (req: Request, res: Response) => {
   try {
+    console.log(req.body)
     const { message } = userInputSchema.parse(req.body);
     const {systemPrompt}=req.body
     const response = await openai.chat.completions.create({

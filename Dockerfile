@@ -9,7 +9,6 @@ COPY . .
 
 RUN npx prisma generate
 
-# Build TypeScript
 RUN npm run build
 
 EXPOSE 8000
