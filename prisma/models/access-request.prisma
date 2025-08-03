@@ -1,0 +1,35 @@
+model CalendarAccessRequest {
+  id                  String   @id @default(uuid())
+  requesterUser       User     @relation("RequesterRequests", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  requesterUserId     String
+  targetEmail         String
+  targetUser          User?    @relation("TargetRequests", fields: [targetUserId], references: [id], onDelete: SetNull)
+  targetUserId        String?
+  token               String   @unique
+  purpose             String
+  location            String?
+  status              AccessRequestStatus @default(pending)
+  expiresAt           DateTime
+  respondedAt         DateTime?
+  preferredDuration   Int?
+  preferredTimeframe  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  meetingRequests     MeetingRequest[]
+  slotOffers          SlotOffer[]
+}
+
+model SlotOffer {
+  id                    String   @id @default(uuid())
+  accessRequest         CalendarAccessRequest @relation(fields: [accessRequestId], references: [id], onDelete: Cascade)
+  accessRequestId       String
+  telegramMessageId     String?
+  telegramChatId        String
+  offeredSlots          Json
+  status                SlotOfferStatus @default(active)
+  expiresAt             DateTime
+  selectedSlotIndex     Int?
+  createdAt             DateTime @default(now())
+  meeting               Meeting?
+  meetingRequest        MeetingRequest?
+}

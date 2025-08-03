@@ -162,7 +162,6 @@ googleRouter.get('/callback', async (req: Request, res: Response) => {
     const decoded = jwt.verify(state, process.env.JWT_SECRET!) as { userId: string };
     const userId = decoded.userId;
 
-    // 🔁 Exchange code for tokens
     const tokenRes = await axios.post(
       'https://oauth2.googleapis.com/token',
       new URLSearchParams({
@@ -308,8 +307,7 @@ googleRouter.post('/webhook', async (req, res) => {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const now = new Date();
-    const past = new Date(now.getTime() - 10 * 60 * 1000); // 10 minutes ago
-
+    const past = new Date(now.getTime() - 10 * 60 * 1000); 
     const events = await calendar.events.list({
       calendarId: 'primary',
       timeMin: past.toISOString(),

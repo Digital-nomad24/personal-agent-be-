@@ -1,0 +1,42 @@
+model Meeting {
+  id                    String    @id @default(uuid())
+  title                 String
+  description           String?
+  startTime             DateTime
+  endTime               DateTime
+  duration              Int
+  group                 Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId               String?
+  organizer             User      @relation("UserMeetings", fields: [organizerId], references: [id])
+  organizerId           String
+  location              String?
+  meetingLink           String?
+  status                MeetingStatus @default(confirmed)
+  googleEventId         String?
+  attendees             MeetingAttendee[]
+  sourceType            MeetingSourceType @default(manual)
+  slotOfferId           String?   @unique
+  slotOffer             SlotOffer? @relation(fields: [slotOfferId], references: [id])
+  externalAttendeeEmail String?
+  externalAttendeeName  String?
+  reminderTaskId        String?   @unique
+  reminderTask          Task?     @relation(fields: [reminderTaskId], references: [id])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  meetingRequest        MeetingRequest? @relation("MeetingToRequest")
+  
+  @@index([groupId, startTime])
+}
+model MeetingAttendee {
+  id         String    @id @default(uuid())
+  meeting    Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  meetingId  String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  status     AttendeeStatus @default(pending)
+  response   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  
+  @@unique([meetingId, userId])
+}

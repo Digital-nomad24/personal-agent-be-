@@ -1,0 +1,17 @@
+model MeetingRequest {
+  id                 String   @id @default(uuid())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  // Slot Offer relation (One-to-one)
+  slotOfferId        String?  @unique
+  slotOffer          SlotOffer? @relation(fields: [slotOfferId], references: [id])
+  // Requester User relation (Many-to-one)
+  requesterUserId    String
+  requesterUser      User     @relation("UserToMeetingRequests", fields: [requesterUserId], references: [id])
+  // Access Request relation (Optional many-to-one)
+  accessRequestId    String?
+  accessRequest      CalendarAccessRequest? @relation(fields: [accessRequestId], references: [id])
+  // Final Meeting relation (Optional one-to-one)
+  meetingId          String?  @unique
+  finalMeeting       Meeting? @relation("MeetingToRequest", fields: [meetingId], references: [id])
+}

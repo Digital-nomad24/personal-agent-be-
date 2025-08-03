@@ -1,0 +1,14 @@
+model JobApplication {
+  id             String                @id @default(uuid())
+  user           User                  @relation(fields: [userId], references: [id])
+  userId         String
+  platform       String
+  companyName    String
+  role           String
+  appliedDate    DateTime
+  status         JobApplicationStatus
+  sourceEmailId  String?
+  notes          String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}

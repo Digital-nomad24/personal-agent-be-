@@ -1,0 +1,19 @@
+model Group {
+  id        String             @id @default(uuid())
+  name      String
+  createdAt DateTime           @default(now())
+  members   GroupMembership[]
+  meetings  Meeting[]          
+}
+
+model GroupMembership {
+  id        String     @id @default(uuid())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  role      GroupRole  @default(member)
+  joinedAt  DateTime   @default(now())
+
+  @@unique([userId, groupId])
+}

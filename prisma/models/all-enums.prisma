@@ -1,0 +1,117 @@
+// Task-related enums
+enum TaskStatus {
+  pending
+  completed
+}
+
+enum TaskPriority {
+  high
+  medium
+  low
+}
+
+// Notification
+enum NotificationType {
+  default
+  critical
+}
+
+// Group membership
+enum GroupRole {
+  member
+  admin
+}
+
+// Meeting-related
+enum MeetingSourceType {
+  manual      // Created manually
+  telegram    // Created via /task command
+  calendar    // Imported from calendar
+  recurring   // Part of recurring series
+}
+
+enum MeetingStatus {
+  confirmed    // Matches Google "confirmed"
+  tentative    // Matches Google "tentative"
+  cancelled    // Matches Google "cancelled"
+}
+
+enum AttendeeStatus {
+  pending
+  accepted
+  declined
+  tentative
+}
+
+// Calendar
+enum EventStatus {
+  confirmed
+  tentative
+  cancelled
+}
+
+// Monitoring
+enum MonitoringCategory {
+  JOBS
+  BILLS
+  CUSTOM
+}
+
+// Job application
+enum JobApplicationStatus {
+  APPLIED
+  INTERVIEW
+  REJECTED
+  OFFER
+  WITHDRAWN
+}
+
+// Bill record
+enum BillType {
+  CREDIT_CARD
+  SUBSCRIPTION
+  UTILITY
+  INSURANCE
+  LOAN
+  OTHER
+}
+
+enum BillStatus {
+  PAID
+  DUE
+  OVERDUE
+}
+
+// Custom data points
+enum CustomStatus {
+  PENDING
+  DONE
+  NOTIFIED
+}
+
+// Access requests
+enum AccessRequestStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+// Slot offers
+enum SlotOfferStatus {
+  active
+  expired
+  booked
+  cancelled
+}
+
+// Meeting request status
+enum MeetingRequestStatus {
+  pending           // Just created
+  access_requested  // Email sent to target
+  access_granted    // Target approved
+  slots_offered     // Available times sent
+  booked            // Meeting confirmed
+  cancelled         // Process cancelled
+  expired           // Request timed out
+}

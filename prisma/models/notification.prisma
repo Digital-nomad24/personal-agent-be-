@@ -1,0 +1,13 @@
+model Notification {
+  id        String           @id @default(uuid())
+  message   String
+  type      NotificationType @default(default)
+  dueDate   DateTime
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    String?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+}

@@ -1,0 +1,35 @@
+model User {
+  id                     String             @id @default(uuid())
+  email                  String             @unique
+  name                   String
+  password               String?
+  telegramChatId         String?
+  googleId               String?            @unique
+  provider               String             @default("local")
+  calendarConnected      Boolean            @default(false)
+  googleAccessToken      String?
+  googleRefreshToken     String?
+  accessTokenExpiry      DateTime?
+  lastCalendarSync       DateTime?
+  timeZone               String             @default("UTC")
+  tasks                  Task[]
+  notification           Notification[]
+  groupMemberships       GroupMembership[]
+  calendarEvents         CalendarEvent[]
+  meetings               Meeting[]          @relation("UserMeetings")
+  meetingAttendees       MeetingAttendee[]
+  calendarChannels       CalendarChannel[]
+  calendarLinks          CalendarShareLink[]
+  monitorPreferences     UserMonitorPreference[]
+  jobApplications        JobApplication[]
+  billRecords            BillRecord[]
+  customDataPoints       CustomDataPoint[]
+  meetingRequests        MeetingRequest[]   @relation("UserToMeetingRequests")
+  sentAccessRequests     CalendarAccessRequest[] @relation("RequesterRequests")
+  receivedAccessRequests CalendarAccessRequest[] @relation("TargetRequests")
+  defaultMeetingDuration Int?               @default(30)
+  defaultBufferTime      Int?               @default(15)
+  defaultEarliestHour    Int?               @default(9)
+  defaultLatestHour      Int?               @default(17)
+  allowWeekendsDefault   Boolean            @default(false)
+}

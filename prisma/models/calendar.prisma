@@ -1,0 +1,48 @@
+model CalendarEvent {
+  id             String   @id @default(uuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  title          String
+  description    String?
+  startTime      DateTime
+  endTime        DateTime
+  isAllDay       Boolean   @default(false)
+  googleEventId  String?   @unique
+  status         EventStatus @default(confirmed)
+  isRecurring    Boolean   @default(false)
+  recurringRule  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId, startTime, endTime])
+}
+
+model CalendarChannel {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  channelId   String
+  resourceId  String
+  expiration  DateTime
+  token       String?
+  createdAt   DateTime @default(now())
+}
+
+model CalendarShareLink {
+  id               String   @id @default(uuid())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  token            String   @unique
+  expiresAt        DateTime
+  availableStart   DateTime 
+  availableEnd     DateTime 
+  slotDuration     Int      
+  bufferBetween    Int?     
+  earliestHour     Int      
+  latestHour       Int      
+  timezone         String   
+  allowWeekends    Boolean  @default(false) 
+  allowBookingEdit Boolean  @default(true)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+}

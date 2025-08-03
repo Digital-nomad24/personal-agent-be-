@@ -1,0 +1,33 @@
+model BillRecord {
+  id             String      @id @default(uuid())
+  user           User        @relation(fields: [userId], references: [id])
+  userId         String
+  billType       BillType
+  provider       String
+  amount         Float
+  dueDate        DateTime
+  status         BillStatus
+  recurring      Boolean     @default(false)
+  sourceEmailId  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+model CustomDataPoint {
+  id          String        @id @default(uuid())
+  user        User          @relation(fields: [userId], references: [id])
+  userId      String
+  label       String
+  description String?
+  status      CustomStatus
+  targetDate  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+model UserMonitorPreference {
+  id        String             @id @default(uuid())
+  user      User               @relation(fields: [userId], references: [id])
+  userId    String
+  category  MonitoringCategory
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}

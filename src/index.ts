@@ -17,6 +17,9 @@ import notificationsRouter from "./routes/notifications";
 import groupRouter from "./routes/group";
 import calendarRouter from "./routes/calendar";
 import meetingsRouter from "./routes/meetings";
+import {  emailRouter } from "./routes/email";
+import gmailRouter from "./routes/gmail";
+import { createClient } from 'redis';
 
 dotenv.config();
 
@@ -55,6 +58,8 @@ app.use("/api/v1/notifications",notificationsRouter)
 app.use("/api/v1/group",groupRouter)
 app.use("/api/v1/calendar",calendarRouter)
 app.use("/api/v1/meetings",meetingsRouter)
+app.use("/api/v1/gmail",gmailRouter)
+app.use("/api/v1/emails",emailRouter)
 
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Welcome to the API! Auth service is running.' });
@@ -65,6 +70,36 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   console.error(err.stack);
   res.status(500).json({ message: 'Something went wrong on the server.', error: err.message });
 });
+
+
+// Fixed Redis connection with proper error handling
+export const client = createClient({
+  socket: {
+    host: 'localhost',
+    port: 6379,
+  },
+});
+
+// Proper Redis connection handling
+async function initRedis() {
+  try {
+    await client.connect();
+    console.log('✅ Redis connected successfully');
+  } catch (error) {
+    console.error('❌ Redis connection failed:', error);
+  }
+}
+
+client.on('error', (err :any) => {
+  console.error('Redis Client Error', err);
+});
+
+client.on('connect', () => {
+  console.log('Redis client connected');
+});
+
+// Initialize Redis connection
+initRedis();
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {

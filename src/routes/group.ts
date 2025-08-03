@@ -79,11 +79,11 @@ groupRouter.get('/listUserGroups', authMiddleware, async (req: Request, res: Res
   }
 });
 
-groupRouter.post('/joinGroup', authMiddleware, async (req: Request, res: Response) => {
+groupRouter.post('/joinGroup/:groupId', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const groupId = req.query.groupId as string;
-
+    const groupId = req.params.groupId as string;
+    console.log(req.params.groupId)
     if (!groupId) {
       return res.status(400).json({ message: 'Missing groupId' });
     }
