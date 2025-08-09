@@ -6,7 +6,7 @@ import { Server } from "socket.io";
 import authRouter from "./routes/auth";
 import tasksRouter from "./routes/task";
 import openaiRouter from "./routes/openAI";
-import groqRouter from "./routes/groq";
+// import groqRouter from "./routes/groq";
 import { startReminderCron } from "./cron/scheduler";
 import { userSocketMap } from "./sockets";
 import telegramRouter from "./routes/newTelegram";
@@ -51,7 +51,7 @@ app.use(express.json());
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/tasks', tasksRouter);
 app.use('/api/v1/openai', openaiRouter);
-app.use("/api/v1/groq", groqRouter);
+// app.use("/api/v1/groq", groqRouter);
 app.use("/api/v1/telegram", telegramRouter)
 app.use("/api/v1/google",googleRouter)
 app.use("/api/v1/notifications",notificationsRouter)

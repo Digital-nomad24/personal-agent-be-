@@ -7,9 +7,10 @@ import axios from 'axios';
 import { google } from 'googleapis';
 import jwt from 'jsonwebtoken';
 import {client} from "../index" // Adjust the path to where your function is
-import { sendTelegramMessage } from '../services/telegramService';
+import { sendErrorNotification, sendTelegramMessage } from '../services/telegramService';
 import { generateToken } from './auth';
 import { processIndividualMeetingRequest } from '../utils/approve-callback.utils';
+import { generateAvailableSlots, sendAvailableSlotsToRequester } from '../services/meetingSlots';
 
 
 
@@ -449,6 +450,8 @@ gmailRouter.get('/approval-callback', async (req: Request, res: Response) => {
         type: string;
         targetEmail: string;
         purpose: string;
+        preferredDuration?: number;
+        preferredTimeframe?: string;
         iat: number;
         exp: number;
       };
@@ -456,7 +459,9 @@ gmailRouter.get('/approval-callback', async (req: Request, res: Response) => {
         userId: decoded.userId,
         type: decoded.type,
         targetEmail: decoded.targetEmail,
-        purpose: decoded.purpose
+        purpose: decoded.purpose,
+        preferredDuration: decoded.preferredDuration,
+        preferredTimeframe: decoded.preferredTimeframe
       });
     } catch (error) {
       console.log("❌ [STEP 2] JWT verification failed:", error);
@@ -540,17 +545,8 @@ gmailRouter.get('/approval-callback', async (req: Request, res: Response) => {
         requesterUser: {
           select: { id: true, name: true, email: true, telegramChatId: true }
         },
-        meetingRequests: {
-          select: { 
-            id: true, 
-            createdAt: true,
-            updatedAt: true,
-            slotOfferId: true,
-            requesterUserId: true,
-            accessRequestId: true,
-            meetingId: true
-          }
-        }
+        meetingRequests: true,
+        slotOffers: true
       }
     });
 
@@ -563,6 +559,7 @@ gmailRouter.get('/approval-callback', async (req: Request, res: Response) => {
       id: accessRequest.id,
       status: accessRequest.status,
       meetingRequestsCount: accessRequest.meetingRequests.length,
+      slotOffersCount: accessRequest.slotOffers.length,
       requesterUserId: accessRequest.requesterUser.id,
       requesterEmail: accessRequest.requesterUser.email
     });
@@ -607,37 +604,66 @@ gmailRouter.get('/approval-callback', async (req: Request, res: Response) => {
 
     console.log(`✅ [STEP 8] Updated access request ${accessRequest.id} to approved`);
 
-    // Auto-process meeting requests after approval
-    console.log(`🚀 [STEP 9] Starting auto-processing for ${accessRequest.meetingRequests.length} meeting requests...`);
+    // Generate and store slot offers for each meeting request
+    console.log(`🔄 [STEP 9] Generating slot offers for ${accessRequest.meetingRequests.length} meeting requests`);
     
-    // Process each meeting request asynchronously (don't block the response)
-    setImmediate(async () => {
-      console.log("🔄 [ASYNC STEP 1] setImmediate callback started");
-      console.log("🔄 [ASYNC DEBUG] Meeting requests to process:", accessRequest.meetingRequests.map(mr => ({
-        id: mr.id,
-        accessRequestId: mr.accessRequestId
-      })));
-      
-      try {
+    const duration = accessRequest.preferredDuration || 30; // Default to 30 minutes
+    const timeframe = accessRequest.preferredTimeframe || 'this week';
+
+    try {
+      // Generate available slots
+      const availableSlots = await generateAvailableSlots(
+        decoded.targetEmail,
+        duration,
+        timeframe
+      );
+
+      if (availableSlots.length === 0) {
+        console.log("❌ [STEP 9] No available slots found");
+        // Notify requester that no slots are available
+        if (accessRequest.requesterUser.telegramChatId) {
+          await sendErrorNotification(
+            accessRequest.requesterUser.telegramChatId,
+            `No available slots found for "${accessRequest.purpose}" with ${decoded.targetEmail}.\nPlease try a different time range.`
+          );
+        }
+      } else {
+        // Create slot offers for each meeting request
         for (const meetingRequest of accessRequest.meetingRequests) {
-          console.log(`🔄 [ASYNC STEP 2] Processing meeting request: ${meetingRequest.id}`);
-          try {
-            await processIndividualMeetingRequest(
-              meetingRequest.id, 
-              decoded.targetEmail, 
+          // Create a new slot offer
+          const slotOffer = await prisma.slotOffer.create({
+            data: {
+              accessRequest: { connect: { id: accessRequest.id } },
+              telegramChatId: accessRequest.requesterUser.telegramChatId || '',
+              offeredSlots: JSON.stringify(availableSlots),
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Expires in 24 hours
+              status: 'active'
+            }
+          });
+
+          // Connect the slot offer to the meeting request
+          await prisma.meetingRequest.update({
+            where: { id: meetingRequest.id },
+            data: {
+              slotOffer: { connect: { id: slotOffer.id } }
+            }
+          });
+
+          // Send the slots to the requester via Telegram
+          if (accessRequest.requesterUser.telegramChatId) {
+            await sendAvailableSlotsToRequester(
+              meetingRequest.id,
+              decoded.targetEmail,
               accessRequest.requesterUser,
-              accessRequest // Pass the APPROVED accessRequest
+              timeframe
             );
-            console.log(`✅ [ASYNC STEP 2] Successfully processed meeting request: ${meetingRequest.id}`);
-          } catch (error) {
-            console.error(`❌ [ASYNC STEP 2] Error processing meeting request ${meetingRequest.id}:`, error);
           }
         }
-        console.log("✅ [ASYNC STEP 3] All meeting requests processed");
-      } catch (error) {
-        console.error("❌ [ASYNC ERROR] Fatal error in setImmediate callback:", error);
       }
-    });
+    } catch (error) {
+      console.error('❌ [STEP 9] Error generating slot offers:', error);
+      // Even if slot generation fails, we still proceed with the approval
+    }
 
     // Redirect to success page
     console.log("🎉 [STEP 10] Redirecting to success page");

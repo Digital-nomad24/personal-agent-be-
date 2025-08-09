@@ -207,7 +207,6 @@ export async function processIndividualMeetingRequest(
       stack: error.stack
     });
     
-    // Notify user of failure
     console.log(`📱 [MEETING ERROR] Sending failure notification`);
     if (requester.telegramChatId) {
       await sendTelegramMessage(requester.telegramChatId,
@@ -224,7 +223,6 @@ export async function processIndividualMeetingRequest(
   }
 }
 
-// Helper function to check external availability (calls your existing route)
 export async function checkExternalAvailability(userId: string, targetEmail: string, startDate: string, endDate: string) {
   console.log(`🔍 [AVAILABILITY STEP 1] Starting availability check`);
   console.log(`🔍 [AVAILABILITY DEBUG] Params:`, { userId, targetEmail, startDate, endDate });

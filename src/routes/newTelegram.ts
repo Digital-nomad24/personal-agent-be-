@@ -77,46 +77,68 @@ telegramRouter.post('/connect', async (req, res) => {
 });
 
 // --- CLEANED TELEGRAM BOT WEBHOOK --- //
-// Replace your webhook function with this enhanced version for debugging:
+// Replace your webhook function with this enhanced version for debugg
+
+
+
+
+
+
+
 
 telegramRouter.post('/webhook', async (req, res) => {
   console.log("=".repeat(50));
   console.log("👉 Telegram Webhook Triggered at:", new Date().toISOString());
   console.log("📨 Full Request Body:", JSON.stringify(req.body, null, 2));
-  
+
   const message = req.body.message;
-  
-  // Enhanced logging
-  console.log("📋 Message Details:");
-  console.log("  - Message exists:", !!message);
-  console.log("  - Chat exists:", !!message?.chat);
-  console.log("  - Text:", message?.text);
-  console.log("  - Chat ID:", message?.chat?.id);
-  console.log("  - Message ID:", message?.message_id);
-  console.log("  - From User:", message?.from?.username || message?.from?.first_name);
-  
+  const callbackQuery = req.body.callback_query;
+
+  // Handle inline button callbacks
+  if (callbackQuery) {
+    console.log("🎯 Callback Query Received:", JSON.stringify(callbackQuery, null, 2));
+    const callbackData = callbackQuery.data;
+    const callbackChatId = callbackQuery.message.chat.id;
+
+    try {
+      // Confirm Reminder Example (keep this if needed)
+      if (callbackData.startsWith("confirm_reminder:")) {
+        const taskId = callbackData.split(":")[1];
+        await axios.put(`${API_BASE_URL}/tasks/${taskId}`, { status: 'confirmed' });
+        await sendTelegramMessage(callbackChatId, `✅ Task confirmed!`);
+      }
+
+      // Book Meeting Slot
+      if (callbackData.startsWith("book_slot:")) {
+        const [, selectedSlot, requestId] = callbackData.split(":");
+
+        const confirmResponse = await axios.post(`${API_BASE_URL}/gmail/confirm`, {
+          requestId,
+          selectedSlot
+        });
+
+        await sendTelegramMessage(callbackChatId, `📅 Meeting booked at **${selectedSlot}**!\n\n✅ Confirmation: ${confirmResponse.data.message || 'Success'}`);
+      }
+
+      return res.status(200).send("Callback handled");
+    } catch (err) {
+      console.error("❌ Error handling callback:", err);
+      return res.status(500).send("Error processing callback query");
+    }
+  }
+
   if (!message || !message.chat || !message.text) {
-    console.log("❌ Incomplete message - ignoring");
     return res.status(200).send("Ignored: Incomplete message");
   }
 
   const chatId = message.chat.id;
   const fullText = message.text.trim();
   const command = fullText.split(" ")[0].toLowerCase();
-  
-  console.log("🔍 Parsed Command Details:");
-  console.log("  - Full Text:", fullText);
-  console.log("  - Command:", command);
-  console.log("  - Chat ID:", chatId);
-  
-  // Add a simple test response to every message first
-  try {
-    await sendTelegramMessage(chatId, `🤖 I received: "${fullText}"`);
-    console.log("✅ Test response sent successfully");
-  } catch (testError) {
-    console.error("❌ Failed to send test response:", testError);
-  }
-    if (command === '/remind') {
+
+  // Test reply to confirm message handling
+  await sendTelegramMessage(chatId, `🤖 I received: "${fullText}"`);
+
+  if (command === '/remind') {
   console.log('🔔 Processing REMIND command');
   try {
     // Check if user is authenticated
@@ -230,72 +252,41 @@ telegramRouter.post('/webhook', async (req, res) => {
   }
 }
 
-// NEW /meet command
-if (command === '/meet') {
-  console.log('📅 Processing MEET command');
-  try {
-    // Check if user is authenticated
-    const user = await prisma.user.findFirst({
-      where: { telegramChatId: String(chatId) },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        telegramChatId: true
-      }
-    });
-   
-    if (!user) {
-      await sendTelegramMessage(chatId,
-        '🔐 **Authentication Required**\n\n' +
-        'You need to connect your account first before scheduling meetings.\n\n' +
-        '**Connection Commands:**\n' +
-        '• For Google users: `/start [your_email]`\n' +
-        '• For password users: `/start [your_email] [your_password]`\n\n' +
-        '**Examples:**\n' +
-        '• `/start john@gmail.com`\n' +
-        '• `/start john@example.com mypassword123`\n\n' +
-        '✨ Once connected, you can use `/meet` to schedule meetings!'
-      );
-      return res.status(200).send("User not authenticated for meeting");
-    }
-   
-    // Get the meeting message (everything after /meet)
-    const meetingMessage = fullText.replace(/^\/meet\s+/i, '').trim();
-   
-    if (!meetingMessage) {
-      await sendTelegramMessage(chatId,
-        '⚠️ **No meeting details provided**\n\n' +
-        '**Example:** `/meet Schedule sync with john@example.com for 30min next week`'
-      );
-      return res.status(200).send("No meeting message");
-    }
-   
-    console.log("🔄 Extracting meeting from message:", meetingMessage);
-    
-    // Extract meeting using the extraction API
+  if (command === '/meet') {
+    console.log('📅 Processing MEET command');
+
     try {
+      const user = await prisma.user.findFirst({
+        where: { telegramChatId: String(chatId) },
+        select: { id: true, email: true, name: true, telegramChatId: true }
+      });
+
+      if (!user) {
+        await sendTelegramMessage(chatId, '🔐 You need to connect your account first using `/start [email]`.');
+        return res.status(200).send("User not authenticated for meeting");
+      }
+
+      const meetingMessage = fullText.replace(/^\/meet\s+/i, '').trim();
+
+      if (!meetingMessage) {
+        await sendTelegramMessage(chatId, '⚠️ Please provide meeting details.\n_Example: `/meet Schedule sync with john@example.com for 30min next week`_');
+        return res.status(200).send("No meeting message");
+      }
+
       const extractionResponse = await axios.post(`${API_BASE_URL}/openai/extract-meeting`, {
         message: meetingMessage,
         systemPrompt: meetingExtractPrompt
-      }, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 30000
       });
-      
+
       const { isMeeting, meeting, message: aiMessage } = extractionResponse.data;
-      
+
       if (!isMeeting || !meeting) {
-        await sendTelegramMessage(chatId,
-          `🤖 **AI Response:**\n\n${aiMessage || 'Could not extract meeting details from your message. Please try rephrasing.'}`
-        );
-        return res.status(200).send("Not a valid meeting request");
+        await sendTelegramMessage(chatId, `🤖 AI Response:\n\n${aiMessage || 'Could not extract meeting details.'}`);
+        return res.status(200).send("Invalid meeting");
       }
-      
-      console.log("✅ Meeting extracted successfully:", meeting);
-      
-      // Create meeting request (this would trigger the calendar access flow)
+
       const token = generateToken(user.id);
+
       const meetingRequestPayload = {
         title: meeting.title,
         description: meeting.description || '',
@@ -307,78 +298,63 @@ if (command === '/meet') {
         meetingLink: meeting.meetingLink,
         requesterUserId: user.id
       };
-      
-      console.log(meetingRequestPayload)
-      const meetingResponse = await axios.post(`http://localhost:8000/api/v1/gmail/request`, meetingRequestPayload, {
+
+      const meetingResponse = await axios.post(`${API_BASE_URL}/gmail/request`, meetingRequestPayload, {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      const { requestId } = meetingResponse.data;
-     
-      await sendTelegramMessage(chatId,
-        `✅ **Meeting Request Created!**\n\n` +
-        `📝 **Title:** ${meeting.title}\n` +
-        `👤 **With:** ${meeting.targetEmail}\n` +
-        `⏱️ **Duration:** ${meeting.duration} minutes\n` +
-        `📅 **Timeframe:** ${meeting.preferredTimeframe}\n` +
-        `🎯 **Purpose:** ${meeting.purpose || 'Not specified'}\n\n` +
-        `📧 **Next Step:** Calendar access request sent to ${meeting.targetEmail}\n` +
-        `🔄 **Request ID:** ${requestId}`
-      );
-     
-    } catch (apiError: any) {
-      console.error("❌ Error with meeting extraction/creation:", apiError.response?.data || apiError.message);
-     
-      await sendTelegramMessage(chatId,
-        '❌ **Failed to Schedule Meeting**\n\n' +
-        'Something went wrong. Please try again later.'
-      );
+
+      const { requestId, slots } = meetingResponse.data;
+
+      if (!slots || slots.length === 0) {
+        await sendTelegramMessage(chatId, `✅ Meeting request created!\nNo free slots found. The recipient can still manually accept.`);
+      } else {
+        // Show inline buttons for slot selection
+        const inlineKeyboard = slots.map((slot:any) => [
+          {
+            text: `${slot}`, // Example: "Tue 3PM"
+            callback_data: `book_slot:${slot}:${requestId}`
+          }
+        ]);
+
+        await sendTelegramMessage(chatId,
+          `✅ **Meeting Request Created!**\n\n` +
+          `📝 **Title:** ${meeting.title}\n` +
+          `👤 **With:** ${meeting.targetEmail}\n` +
+          `⏱️ **Duration:** ${meeting.duration} minutes\n\n` +
+          `📅 **Choose a slot to confirm:**`,
+          {
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          }
+        );
+      }
+
+      return res.status(200).send("Meeting command processed");
+    } catch (error: any) {
+      console.error("❌ Error scheduling meeting:", error.response?.data || error.message);
+      await sendTelegramMessage(chatId, '❌ Failed to schedule meeting. Please try again later.');
+      return res.status(500).send("Error scheduling meeting");
     }
-   
-    return res.status(200).send("Meeting command processed");
-   
-  } catch (error) {
-    console.error("❌ Error processing meeting:", error);
-   
-    await sendTelegramMessage(chatId,
-      '❌ **System Error**\n\n' +
-      'Something went wrong processing your meeting request. Please try again.'
-    );
-   
-    return res.status(200).send("Error in meeting processing");
   }
-} else if (command === '/help') {
-  await sendTelegramMessage(chatId,
-    '🛠️ **Help Menu**\n\n' +
-    'Here are the available commands you can use:\n\n' +
-    '• `/remind <time> <message>`\n' +
-    '  Set a reminder.\n' +
-    '  _Example:_ `/remind 10m Take a break`\n\n' +
-    '• `/meet <email>`\n' +
-    '  Schedule a meeting with someone by sending them a calendar access link.\n' +
-    '  _Example:_ `/meet someone@example.com`\n\n' +
-    '• `/help`\n' +
-    '  Show this help menu.'
-  );
-  return res.status(200).send("Help command processed");
 
-} else {
-  console.log('❓ Unknown command:', command);
+  if (command === '/help') {
+    await sendTelegramMessage(chatId,
+      '🛠️ **Help Menu**\n\n' +
+      'Available commands:\n' +
+      '• `/remind <message>` — Set a reminder\n' +
+      '• `/meet <details>` — Schedule a meeting\n' +
+      '• `/help` — Show this menu'
+    );
+    return res.status(200).send("Help command processed");
+  }
 
+  // Fallback for unknown commands
   await sendTelegramMessage(chatId,
-    '❓ **Unknown Command**\n\n' +
-    'Available commands:\n' +
-    '• `/remind` - Set a reminder\n' +
-    '• `/meet` - Schedule a meeting\n' +
-    '• `/help` - Show help\n\n' +
-    'Type `/help` to learn how to use them.'
+    '❓ Unknown command.\n\nType `/help` to see available options.'
   );
   return res.status(200).send("Unknown command processed");
-}
-  
 });
 
 export default telegramRouter;
